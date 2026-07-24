@@ -61,8 +61,10 @@ else
 fi
 export BUZZ_ACP_AGENT_COMMAND="${RUNTIME}"
 export BUZZ_ACP_SYSTEM_PROMPT_FILE="${PROMPT}"
-# Parallelism: 2 worker subprocesses per agent (handles 2 channels/turns at once).
-export BUZZ_ACP_AGENTS="${BUZZ_ACP_AGENTS:-2}"
+# Parallelism: 1 worker subprocess per agent (simplest; one turn at a time, lightest
+# on RAM). Override per deploy via the BUZZ_ACP_AGENTS env var. Codex is always
+# pinned to 1 below regardless (shared-SQLite-state constraint).
+export BUZZ_ACP_AGENTS="${BUZZ_ACP_AGENTS:-1}"
 
 # Model + brain key, per runtime.
 if [ "${RUNTIME}" = "claude-agent-acp" ]; then
@@ -77,13 +79,22 @@ if [ "${RUNTIME}" = "claude-agent-acp" ]; then
   export CLAUDE_CODE_EFFORT_LEVEL="${CLAUDE_EFFORT}"
   MODEL_SHOWN="${CLAUDE_MODEL} effort=${CLAUDE_EFFORT}"
 else
+  # Per-role Codex home. Codex keeps a per-home SQLite state under $CODEX_HOME
+  # (default ~/.codex). Two Codex agents sharing one home — or two parallel
+  # workers of one agent — collide on that state ("failed to initialize sqlite
+  # state runtime under /home/agent/.codex"). Give each role its own home.
+  export CODEX_HOME="${HOME}/.codex-${ROLE}"
+  mkdir -p "${CODEX_HOME}"
+  # One worker per Codex agent: within-agent parallelism would spawn a second
+  # codex process sharing this same CODEX_HOME and collide on the SQLite state.
+  export BUZZ_ACP_AGENTS=1
+
   # Auth: prefer ChatGPT SUBSCRIPTION via a transplanted auth.json (base64 in
   # CODEX_AUTH_JSON); else OPENAI_API_KEY (API billing). Need at least one.
   if [ -n "${CODEX_AUTH_JSON:-}" ]; then
-    mkdir -p "${HOME}/.codex"
-    printf '%s' "${CODEX_AUTH_JSON}" | base64 -d > "${HOME}/.codex/auth.json"
-    chmod 600 "${HOME}/.codex/auth.json"
-    echo "[run-agent] wrote ~/.codex/auth.json from CODEX_AUTH_JSON (subscription auth)"
+    printf '%s' "${CODEX_AUTH_JSON}" | base64 -d > "${CODEX_HOME}/auth.json"
+    chmod 600 "${CODEX_HOME}/auth.json"
+    echo "[run-agent] wrote ${CODEX_HOME}/auth.json from CODEX_AUTH_JSON (subscription auth)"
   elif [ -z "${OPENAI_API_KEY:-}" ]; then
     echo "run-agent: Codex agents need CODEX_AUTH_JSON (subscription) or OPENAI_API_KEY (API)" >&2
     exit 1

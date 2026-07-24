@@ -51,7 +51,7 @@ All 5 connect out to wss://yc2897.communities.buzz.xyz and authenticate with the
 - **Relay:** `wss://yc2897.communities.buzz.xyz`
 - **Owner:** `f6e2…1122` (so you can always command any agent)
 - **Models / effort:** `claude-opus-4-8` · `gpt-5.5` · effort `high`
-- **Parallelism:** 2 workers/agent → instance sized **8 GB**
+- **Parallelism:** 1 worker/agent (default in `run-agent.sh`; set `BUZZ_ACP_AGENTS` to raise it — Codex stays pinned to 1)
 - **Allowlists:** full mesh (all 5)
 
 ## Auth = your subscriptions (not API keys)
