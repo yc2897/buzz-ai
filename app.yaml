@@ -1,0 +1,105 @@
+# DigitalOcean App Platform spec — 5 Buzz agents in ONE Worker.
+#
+# One Worker, one bill, five agents inside (supervisord runs them all).
+# Runtimes: career/operations/knowledge -> Claude Code; redteam/engineering -> Codex.
+# System prompts are baked into the image (prompts/*.md); this file only supplies
+# identity, relay, allowlists, and the two brain API keys.
+#
+# Apply with:  doctl apps create --spec app.yaml
+# Or paste into the App Platform UI (Create App -> from spec).
+
+name: buzz-ai-agents
+region: nyc
+
+workers:
+  - name: agents
+    # Your PRIVATE repo holding this Dockerfile (not block/buzz).
+    github:
+      repo: yc2897/buzz-ai
+      branch: main
+      deploy_on_push: true # safe: this is YOUR branch, not upstream's
+
+    dockerfile_path: Dockerfile
+    source_dir: /
+
+    # 5 agents x parallelism 2 = ~10 harness processes (each Node + Claude/Codex).
+    # That's memory-heavy — starting at 8 GB. Drop to 4 GB only if you lower
+    # parallelism. ⚠️ DO renames these slugs over time — verify in the UI.
+    instance_size_slug: apps-d-4vcpu-8gb
+    instance_count: 1
+
+    envs:
+      # ── Build-time: which upstream tag to compile ───────────────────────
+      - { key: BUZZ_REF, scope: BUILD_TIME, value: v0.4.22 }
+
+      # ── Shared runtime ──────────────────────────────────────────────────
+      - key: BUZZ_RELAY_URL
+        scope: RUN_TIME
+        value: wss://yc2897.communities.buzz.xyz # your Block-hosted relay
+
+      # Your OWNER identity (public — not a secret). Lets every agent recognize
+      # YOU as its owner, so you're always allowed to command it (the "owner
+      # implicitly allowed" rule). 64-char HEX of your npub, NOT the npub itself.
+      - key: BUZZ_ACP_AGENT_OWNER
+        scope: RUN_TIME
+        value: f6e23876ed6c7c82486c371a0f577f08c3d7025008a35900be0b7129757a1122
+
+      # Models (non-secret). Change here to swap models without editing code.
+      # ⚠️ verify these exact slugs work with a smoke test (see README).
+      - { key: CLAUDE_MODEL, scope: RUN_TIME, value: claude-opus-4-8 } # Career/Operations/Knowledge
+      - { key: CODEX_MODEL,  scope: RUN_TIME, value: gpt-5.5 }         # Red Team/Engineering
+      - { key: CLAUDE_EFFORT, scope: RUN_TIME, value: high }          # evidenced max for Claude Code
+      - { key: CODEX_EFFORT,  scope: RUN_TIME, value: high }          # evidenced max for Codex
+
+      # Brain auth.
+      # Claude agents (career/operations/knowledge) → your SUBSCRIPTION via a
+      # 1-year token from `claude setup-token` (headless, no API billing).
+      # Set CLAUDE_CODE_OAUTH_TOKEN; leave ANTHROPIC_API_KEY UNSET (it would win).
+      - key: CLAUDE_CODE_OAUTH_TOKEN
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_ME_from_claude_setup-token
+      # Alternative to the token (API pay-per-token) — set ONLY ONE of these:
+      # - { key: ANTHROPIC_API_KEY, scope: RUN_TIME, type: SECRET, value: REPLACE_ME_sk-ant-... }
+      #
+      # Codex agents (redteam/engineering) → ChatGPT SUBSCRIPTION via a
+      # transplanted auth.json (base64 of your local ~/.codex/auth.json).
+      # ⚠️ FRAGILE: tokens refresh/rotate and the DO filesystem is ephemeral, so
+      # expect to re-login locally and update this value when Codex stops working.
+      # Generate:  base64 -i ~/.codex/auth.json | tr -d '\n'   (then paste here)
+      - key: CODEX_AUTH_JSON
+        scope: RUN_TIME
+        type: SECRET
+        value: REPLACE_ME_base64_of_codex_auth_json
+      # Reliable alternative (API pay-per-token) — set only ONE of these:
+      # - { key: OPENAI_API_KEY, scope: RUN_TIME, type: SECRET, value: REPLACE_ME_sk-... }
+
+      # ── Per-agent identities (SECRET — one nsec each, from Bitwarden) ────
+      - { key: CAREER_NSEC,      scope: RUN_TIME, type: SECRET, value: REPLACE_ME_nsec1... }
+      - { key: OPERATIONS_NSEC,  scope: RUN_TIME, type: SECRET, value: REPLACE_ME_nsec1... }
+      - { key: KNOWLEDGE_NSEC,   scope: RUN_TIME, type: SECRET, value: REPLACE_ME_nsec1... }
+      - { key: REDTEAM_NSEC,     scope: RUN_TIME, type: SECRET, value: REPLACE_ME_nsec1... }
+      - { key: ENGINEERING_NSEC, scope: RUN_TIME, type: SECRET, value: REPLACE_ME_nsec1... }
+
+      # ── Delegation allowlists — 64-char HEX pubkeys, comma-separated ─────
+      #    NOT npub. Convert each agent's npub -> hex first.
+      #    (You, the owner, are ALWAYS implicitly allowed.)
+      #
+      # FULL MESH — every head can talk to every other head (each list = the
+      # other 4). The reporting hierarchy is just the mental model; it lives in
+      # the prompts, not here.
+      - key: CAREER_ALLOWLIST
+        scope: RUN_TIME
+        value: 470eb7cb7f04caef853a7f9e0eb03f2d9a9ed53a2fd1bd9d995864492d41ffc6,9f432ab55996b6ed230e69425f4330d9ca2d21e2598acd24450197e8f068a01c,ac959d5b75cde87e7f3cff3359aa0f08a37177cae8f847a9bd02a2cf6cad6845,a294106f364b8cf1a0237b122defbcee31cc149a00c910a791b0d71c4b234075
+      - key: OPERATIONS_ALLOWLIST
+        scope: RUN_TIME
+        value: 73def8e8c09b32f6702cc59399a450c9441099962becd2855551fceaa8dc7a35,9f432ab55996b6ed230e69425f4330d9ca2d21e2598acd24450197e8f068a01c,ac959d5b75cde87e7f3cff3359aa0f08a37177cae8f847a9bd02a2cf6cad6845,a294106f364b8cf1a0237b122defbcee31cc149a00c910a791b0d71c4b234075
+      - key: KNOWLEDGE_ALLOWLIST
+        scope: RUN_TIME
+        value: 73def8e8c09b32f6702cc59399a450c9441099962becd2855551fceaa8dc7a35,470eb7cb7f04caef853a7f9e0eb03f2d9a9ed53a2fd1bd9d995864492d41ffc6,ac959d5b75cde87e7f3cff3359aa0f08a37177cae8f847a9bd02a2cf6cad6845,a294106f364b8cf1a0237b122defbcee31cc149a00c910a791b0d71c4b234075
+      - key: REDTEAM_ALLOWLIST
+        scope: RUN_TIME
+        value: 73def8e8c09b32f6702cc59399a450c9441099962becd2855551fceaa8dc7a35,470eb7cb7f04caef853a7f9e0eb03f2d9a9ed53a2fd1bd9d995864492d41ffc6,9f432ab55996b6ed230e69425f4330d9ca2d21e2598acd24450197e8f068a01c,a294106f364b8cf1a0237b122defbcee31cc149a00c910a791b0d71c4b234075
+      - key: ENGINEERING_ALLOWLIST
+        scope: RUN_TIME
+        value: 73def8e8c09b32f6702cc59399a450c9441099962becd2855551fceaa8dc7a35,470eb7cb7f04caef853a7f9e0eb03f2d9a9ed53a2fd1bd9d995864492d41ffc6,9f432ab55996b6ed230e69425f4330d9ca2d21e2598acd24450197e8f068a01c,ac959d5b75cde87e7f3cff3359aa0f08a37177cae8f847a9bd02a2cf6cad6845

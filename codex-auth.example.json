@@ -1,0 +1,12 @@
+{
+  "_comment": "TEMPLATE ONLY — safe to commit. Copy this to codex-auth.json (gitignored), paste your REAL tokens from ~/.codex/auth.json, then feed it to DO as the CODEX_AUTH_JSON secret (see README). Never commit the real one.",
+  "auth_mode": "chatgpt",
+  "OPENAI_API_KEY": null,
+  "tokens": {
+    "id_token": "PASTE_FROM_~/.codex/auth.json",
+    "access_token": "PASTE_FROM_~/.codex/auth.json",
+    "refresh_token": "PASTE_FROM_~/.codex/auth.json",
+    "account_id": "PASTE_FROM_~/.codex/auth.json"
+  },
+  "last_refresh": "2026-01-01T00:00:00Z"
+}

@@ -1,0 +1,17 @@
+# Never commit secrets — nsec keys and API keys belong in DO's secret env vars.
+.env
+.env.*
+*.nsec
+secrets/
+.codemap
+
+# Codex ChatGPT session tokens — keep the REAL file local, NEVER commit it.
+# (Committing it puts your tokens in git history + the image forever.)
+codex-auth.json
+auth.json
+*.auth.json
+
+# Local scratch
+.DS_Store
+target/
+node_modules/
