@@ -42,9 +42,9 @@ All 5 connect out to wss://yc2897.communities.buzz.xyz and authenticate with the
 | `supervisord.conf` | Runs all 5 agents, restarts any that crash |
 | `prompts/*.md` | The 5 system prompts |
 | `app.yaml` | DO App Platform spec — ONE Worker |
-| `codex-auth.example.json` | Template for the Codex token file (safe to commit) |
+| `templates/codex-auth.example.json` | Template for the Codex token file (safe to commit) |
+| `templates/env.example` | Committed template of the DO env vars (public values + agent pubkeys as comments; copy to `.env` to fill secrets) |
 | `agent-snapshots/*.agent.json` | Desktop-import copies (source of the prompts; DO doesn't use them) |
-| `publickeys.txt` | The 5 agent pubkeys (npub + hex) |
 | `tools/gen_auth_tags.py` | Mints the 5 `*_AUTH_TAG` NIP-OA owner attestations (needs your owner key + the pubkeys) |
 
 ## What's already wired (in `app.yaml`)

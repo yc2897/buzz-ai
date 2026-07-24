@@ -79,5 +79,7 @@ Full mesh + parallelism 2 + high effort = real token/subscription usage. Watch y
 Claude/ChatGPT plan limits; they can throttle.
 
 ## Key file map
-`Dockerfile` `run-agent.sh` `supervisord.conf` `app.yaml` `prompts/` `publickeys.txt`
+`Dockerfile` `run-agent.sh` `supervisord.conf` `app.yaml` `prompts/`
+`templates/env.example` (public env template + agent pubkeys as comments; copy to
+`templates/.env` to fill secrets) · `templates/codex-auth.example.json`
 `tools/gen_auth_tags.py` · `README.md` (full how-to) · `resume.md` (this).
