@@ -11,6 +11,13 @@ codex-auth.json
 auth.json
 *.auth.json
 
+# Generated credentials — tools/gen_auth_tags.py writes these next to itself.
+# NEVER commit: auth_tags.local holds the minted BUZZ_AUTH_TAG values; owner_key.local
+# would hold your owner secret (the script shreds it, but ignore it as a backstop).
+*.local
+auth_tags*
+owner_key*
+
 # Local scratch
 .DS_Store
 target/

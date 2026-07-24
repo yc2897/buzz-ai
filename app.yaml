@@ -16,7 +16,7 @@ workers:
     # Your PRIVATE repo holding this Dockerfile (not block/buzz).
     github:
       repo: yc2897/buzz-ai
-      branch: main
+      branch: v0
       deploy_on_push: true # safe: this is YOUR branch, not upstream's
 
     dockerfile_path: Dockerfile
@@ -80,6 +80,17 @@ workers:
       - { key: KNOWLEDGE_NSEC,   scope: RUN_TIME, type: SECRET, value: REPLACE_ME_nsec1... }
       - { key: REDTEAM_NSEC,     scope: RUN_TIME, type: SECRET, value: REPLACE_ME_nsec1... }
       - { key: ENGINEERING_NSEC, scope: RUN_TIME, type: SECRET, value: REPLACE_ME_nsec1... }
+
+      # ── Per-agent relay membership (SECRET — one NIP-OA auth tag each) ───
+      # NIP-OA owner attestation: ["auth","<owner-hex>","","<sig>"]. Proves YOU
+      # authorized this agent, so it's admitted to the closed relay as your
+      # delegate. Generated with gen_auth_tags.py (owner key + agent pubkey).
+      # Optional: if the relay turns out to be open, these can stay unset.
+      - { key: CAREER_AUTH_TAG,      scope: RUN_TIME, type: SECRET, value: REPLACE_ME_auth_tag_json }
+      - { key: OPERATIONS_AUTH_TAG,  scope: RUN_TIME, type: SECRET, value: REPLACE_ME_auth_tag_json }
+      - { key: KNOWLEDGE_AUTH_TAG,   scope: RUN_TIME, type: SECRET, value: REPLACE_ME_auth_tag_json }
+      - { key: REDTEAM_AUTH_TAG,     scope: RUN_TIME, type: SECRET, value: REPLACE_ME_auth_tag_json }
+      - { key: ENGINEERING_AUTH_TAG, scope: RUN_TIME, type: SECRET, value: REPLACE_ME_auth_tag_json }
 
       # ── Delegation allowlists — 64-char HEX pubkeys, comma-separated ─────
       #    NOT npub. Convert each agent's npub -> hex first.

@@ -44,7 +44,11 @@ COPY --from=builder /src/target/release/buzz     /usr/local/bin/buzz
 COPY prompts          /opt/buzz-prompts
 COPY run-agent.sh     /usr/local/bin/run-agent.sh
 COPY supervisord.conf /etc/supervisor/agents.conf
-RUN chmod +x /usr/local/bin/run-agent.sh \
+# Normalize line endings: a Windows checkout copies these as CRLF, which breaks
+# the bash shebang and the supervisord parser. Strip CR so the image is correct
+# regardless of the host that built it.
+RUN sed -i 's/\r$//' /usr/local/bin/run-agent.sh /etc/supervisor/agents.conf \
+    && chmod +x /usr/local/bin/run-agent.sh \
     && useradd --create-home --shell /bin/bash agent
 
 # Run as non-root. Each agent has full access to THIS container's filesystem,

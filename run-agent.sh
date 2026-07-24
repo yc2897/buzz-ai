@@ -14,6 +14,8 @@
 # Per-role env vars (set in DO):
 #   <ROLE>_NSEC       (SECRET) the agent's Nostr private key    — REQUIRED
 #   <ROLE>_ALLOWLIST  comma-separated 64-hex pubkeys it obeys   — optional
+#   <ROLE>_AUTH_TAG   (SECRET) NIP-OA owner attestation, ["auth",...] JSON;
+#                     grants relay membership on a closed relay      — optional
 # Shared env vars:
 #   BUZZ_RELAY_URL     wss://... your Block-hosted relay         — REQUIRED
 #   ANTHROPIC_API_KEY  (SECRET) brain for the Claude agents      — required for claude roles
@@ -43,9 +45,20 @@ esac
 
 nsec_var="${ROLE}_NSEC"
 allow_var="${ROLE}_ALLOWLIST"
+authtag_var="${ROLE}_AUTH_TAG"
 
 export BUZZ_PRIVATE_KEY="${!nsec_var:?missing env ${nsec_var}}"
 export BUZZ_RELAY_URL="${BUZZ_RELAY_URL:?missing env BUZZ_RELAY_URL}"
+
+# NIP-OA owner attestation (relay membership on a closed relay). Optional: empty
+# is treated as unset by buzz-acp/buzz-cli. Exported before the profile publish
+# below so that first relay connection also carries membership.
+export BUZZ_AUTH_TAG="${!authtag_var:-}"
+if [ -n "${BUZZ_AUTH_TAG}" ]; then
+  AUTHTAG_SHOWN="set(${authtag_var})"
+else
+  AUTHTAG_SHOWN="UNSET — relies on owner-recognition only; closed relay may reject"
+fi
 export BUZZ_ACP_AGENT_COMMAND="${RUNTIME}"
 export BUZZ_ACP_SYSTEM_PROMPT_FILE="${PROMPT}"
 # Parallelism: 2 worker subprocesses per agent (handles 2 channels/turns at once).
@@ -95,5 +108,5 @@ buzz users set-profile --name "${NAME}" --about "${ABOUT}" \
   && echo "[run-agent] published profile: ${NAME}" \
   || echo "[run-agent] profile publish failed for ${NAME} (non-fatal)"
 
-echo "[run-agent] role=${ROLE} runtime=${RUNTIME} model=${MODEL_SHOWN} agents=${BUZZ_ACP_AGENTS} prompt=${PROMPT} respond_to=${BUZZ_ACP_RESPOND_TO}"
+echo "[run-agent] role=${ROLE} runtime=${RUNTIME} model=${MODEL_SHOWN} agents=${BUZZ_ACP_AGENTS} prompt=${PROMPT} respond_to=${BUZZ_ACP_RESPOND_TO} auth_tag=${AUTHTAG_SHOWN}"
 exec buzz-acp

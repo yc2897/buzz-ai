@@ -45,6 +45,7 @@ All 5 connect out to wss://yc2897.communities.buzz.xyz and authenticate with the
 | `codex-auth.example.json` | Template for the Codex token file (safe to commit) |
 | `agent-snapshots/*.agent.json` | Desktop-import copies (source of the prompts; DO doesn't use them) |
 | `publickeys.txt` | The 5 agent pubkeys (npub + hex) |
+| `tools/gen_auth_tags.py` | Mints the 5 `*_AUTH_TAG` NIP-OA owner attestations (needs your owner key + the pubkeys) |
 
 ## What's already wired (in `app.yaml`)
 - **Relay:** `wss://yc2897.communities.buzz.xyz`
@@ -61,18 +62,25 @@ All 5 connect out to wss://yc2897.communities.buzz.xyz and authenticate with the
 
 ## Setup
 
-1. **Push this dir to the private repo** `yc2897/buzz-ai` (a fork of a public repo
-   can't be private — this is a standalone private repo referencing upstream).
-2. **Test the build first** (real Rust compile, several minutes):
+1. **Push this dir to the private repo** `yc2897/buzz-ai`, branch `v0` (a fork of a
+   public repo can't be private — this is a standalone private repo referencing
+   upstream). DO builds from the **pushed** GitHub source, so anything uncommitted
+   won't deploy.
+2. **(Optional) test the build locally** (real Rust compile, several minutes):
    ```bash
    docker build -t buzz-ai:test .
    ```
-3. **Generate the 7 secrets** and store in Bitwarden + the DO UI:
+   Not required — DO builds from source on its own infra, so its build log is the
+   real gate. (A local build behind a TLS-inspecting corporate proxy will fail at
+   the crates.io step; that does NOT affect the DO build.)
+3. **Generate the 12 secrets** and store in Bitwarden + the DO UI:
    - `CLAUDE_CODE_OAUTH_TOKEN` ← `claude setup-token`
    - `CODEX_AUTH_JSON` ← `base64 -i ~/.codex/auth.json | tr -d '\n'`
    - `CAREER_NSEC` … `ENGINEERING_NSEC` ← the 5 keys from Bitwarden
+   - `CAREER_AUTH_TAG` … `ENGINEERING_AUTH_TAG` ← `python3 tools/gen_auth_tags.py`
+     (needs your owner key; see the script header)
 4. **Deploy:** `doctl apps create --spec app.yaml` (or paste into the DO UI), then set
-   the 7 secrets in the dashboard.
+   the 12 secrets in the dashboard.
 5. **Stop the desktop copies** of these agents first (same keys) so one identity isn't
    running in two places.
 6. **Smoke-test one agent** (@mention it) before trusting all five.
@@ -98,8 +106,10 @@ Bump `BUZZ_REF` (in `app.yaml` and the `Dockerfile` `ARG`) from `v0.4.22` to a n
 - **Cost/limits:** full mesh + parallelism 2 + high effort = heavy subscription usage; watch it.
 
 ## Unverified — confirm on first run (details in `resume.md`)
-- The pinned tag builds cleanly with `--locked`.
+- The pinned tag builds cleanly with `--locked` (DO's build log is the gate).
 - Model slugs `claude-opus-4-8` / `gpt-5.5` are accepted (the `[1m]` 1M-context is NOT pinned).
 - The `claude-agent-acp` / `codex-acp` adapters don't need extra CLIs.
-- Whether the closed relay needs a per-agent `BUZZ_AUTH_TAG` (membership) beyond the key.
+- Whether the closed relay strictly **requires** the per-agent `BUZZ_AUTH_TAG`. The
+  tags are already generated (`tools/gen_auth_tags.py`) and wired in, so if the relay
+  needs them they're set; the smoke test confirms whether they were required.
 - `instance_size_slug` names change over time — verify in the DO UI.
