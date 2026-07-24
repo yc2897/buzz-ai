@@ -1,13 +1,10 @@
 # RESUME — where we left off
 
-Pick-up point for the buzz-ai deploy. **Config + auth tags are done; nothing is
-pushed or deployed yet.** (Last updated 2026-07-24.)
+Pick-up point for buzz-ai. (Last updated 2026-07-24.)
 
 ## What this project is
-Run **5 personal AI agents** ("your org") always-on, off your laptop, on
-**DigitalOcean App Platform** (one Worker, `supervisord` runs all 5 inside it),
-talking to your **Block-hosted (Builderlab) relay**. You call them from the Buzz
-desktop/mobile app.
+Run **5 personal AI agents** ("your org") always-on, talking to your **Block-hosted
+(Builderlab) relay**, callable from the Buzz desktop/mobile app.
 
 ```
 You (CEO) ─ human
@@ -17,69 +14,80 @@ You (CEO) ─ human
 │   └── Head of Engineering        (Codex · gpt-5.5)
 └── Head of Operations    (Claude Code · claude-opus-4-8)
 ```
-Hierarchy is just the mental model (it's in the prompts). Communication is a
-**full mesh** — all 5 can talk; you can always command any.
+Hierarchy is just the mental model (in the prompts). Communication is a **full mesh**.
 
-## Fixed facts (wired into app.yaml / run-agent.sh)
+## ✅ Proven working (on DigitalOcean, this session)
+We deployed to DO App Platform and confirmed the whole stack works end to end:
+- Image builds from pinned `v0.4.22`; all 5 agents init.
+- **Relay membership works** — auth tags accepted, profiles published (`{"accepted":true}`),
+  no `restricted`/allowlist errors. The `BUZZ_AUTH_TAG` mechanism is validated.
+- **Model slugs `claude-opus-4-8` / `gpt-5.5` accepted.**
+- Codex `sqlite state runtime` collision fixed (see below).
+- Agents receive DMs (react 👀) and subscribe to channels.
+
+## 🔀 Decision: run LOCALLY, not on DO
+DO at **512 MB crash-looped** — memory spikes past the cap during active turns → the
+platform kills/restarts the container (that's why DMs got 👀 but no reply: killed
+mid-generation). DO needs **≥2 GB** to be stable, which costs money.
+**So the chosen path is local Docker Desktop on a spare computer** (Computer #1):
+ample RAM (no OOM), $0 cloud cost, agents only dial out (no networking). DO still works
+if you'd rather pay for ≥2 GB — `app.yaml` is intact.
+
+## Fixed facts (wired into app.yaml / compose / run-agent.sh)
 - **Relay:** `wss://yc2897.communities.buzz.xyz`
-- **Owner (you):** `f6e23876ed6c7c82486c371a0f577f08c3d7025008a35900be0b7129757a1122`
-- **GitHub repo:** `yc2897/buzz-ai`, branch **`v0`** (the only branch; app.yaml points here)
-- **5 agent pubkeys (hex):** see `publickeys.txt`
-- **Models:** Claude `claude-opus-4-8`, Codex `gpt-5.5`; **effort `high`** (xhigh invalid here)
-- **Parallelism:** 2 workers/agent → ~10 processes → instance **8 GB**
-- **Auth = SUBSCRIPTIONS, not API:** Claude `CLAUDE_CODE_OAUTH_TOKEN`, Codex `CODEX_AUTH_JSON`
+- **Owner:** `f6e23876ed6c7c82486c371a0f577f08c3d7025008a35900be0b7129757a1122`
+- **GitHub:** `yc2897/buzz-ai`, branch **`v0`** (the only branch)
+- **5 agent pubkeys:** in `templates/env.example` (comments) + `app.yaml` allowlists
+- **Models:** `claude-opus-4-8` / `gpt-5.5`; effort `high`
+- **Parallelism:** default **1** for all agents (Codex pinned to 1). Raise via `BUZZ_ACP_AGENTS` on a big local box.
 
-## How the deploy actually works (important)
-`app.yaml` uses the **build-from-source** model (`github:` + `dockerfile_path:`),
-so **DO pulls the pushed GitHub source, builds the image itself, then runs it.**
-It does NOT pull a pre-built image. Consequences:
-- Only what you **push to `v0`** gets built. Uncommitted local edits do nothing.
-- DO's builder is **not** behind SharkNinja's proxy, so the crates.io TLS error a
-  local `docker build` hits on the corp network does NOT affect DO. **DO's build
-  log is the real gate.** A local build is optional convenience only.
+## Local run (the plan) — see README "Run locally"
+- **`docker-compose.yml`** — non-secret config inline; 12 secrets are bare passthroughs.
+- **`start.sh`** — pulls the 12 secrets from **Bitwarden Secrets Manager** (`bws`) at
+  runtime, exports them, `docker compose up -d`. Nothing on disk, nothing in the image.
+- Bootstrap on Computer #1: `BWS_ACCESS_TOKEN` + `BWS_PROJECT_ID` (in shell/keychain).
+- Secret keys in Bitwarden SM must equal env-var names (CAREER_NSEC, CODEX_AUTH_JSON, …).
 
-## ✅ Done this session
-- **`tools/gen_auth_tags.py`** — pure-Python BIP-340 generator for the NIP-OA
-  `BUZZ_AUTH_TAG` owner attestations. Validated against all 27 canonical BIP-340
-  test vectors + the NIP-19 nsec vector. Reads the owner key via file/stdin (never
-  argv), verifies it derives the owner pubkey, self-verifies each signature, writes
-  `auth_tags.local` (chmod 600), shreds the key file.
-- **All 5 auth tags minted** and (per you) recorded into DO + Bitwarden.
-- **`run-agent.sh`** — maps `<ROLE>_AUTH_TAG` → `BUZZ_AUTH_TAG`, exported before the
-  profile publish; startup log shows `auth_tag=set(...)`/`UNSET…`.
-- **`app.yaml`** — added the 5 `*_AUTH_TAG` SECRET slots; fixed `branch: main` → `v0`.
-- **`Dockerfile`** — strips CRLF from `run-agent.sh` + `supervisord.conf` so a Windows
-  checkout doesn't ship broken scripts.
-- **Docs** — README secret count 7→12, added the auth-tag generation step + tools row.
+## ⏳ TODO next session (in order)
+1. **Commit the two new files** (currently untracked): `docker-compose.yml`, `start.sh`.
+   ```
+   git add docker-compose.yml start.sh && git commit -m "Add local docker-compose + start.sh" && git push origin v0
+   ```
+2. **On Computer #1:** install `docker` + `bws` + `jq`; set up Bitwarden Secrets Manager
+   (project + machine token + 12 secrets); export `BWS_ACCESS_TOKEN` / `BWS_PROJECT_ID`.
+3. **`./start.sh`** → first run builds the image locally → agents come up. Test with an
+   `@mention`. Keep the machine awake.
+4. (Optional) GitHub Action to build + push a clean image to GHCR, then switch
+   `docker-compose.yml` `build: .` → `image: ghcr.io/yc2897/buzz-ai:latest`.
 
-## ⏳ TODO next (in order)
-1. **Commit + push** the above to `yc2897/buzz-ai` branch `v0`.
-2. **Record remaining secrets** in DO + Bitwarden (auth tags already recorded):
-   - `CLAUDE_CODE_OAUTH_TOKEN` ← `claude setup-token`
-   - `CODEX_AUTH_JSON` ← `base64 -i ~/.codex/auth.json | tr -d '\n'`
-   - `CAREER_NSEC` … `ENGINEERING_NSEC` ← from Bitwarden
-   → **12 secrets total.**
-3. **Deploy:** connect the repo in DO / `doctl apps create --spec app.yaml`, set the 12 secrets.
-4. **STOP the desktop copies** of these 5 agents (same keys — don't run one identity twice).
-5. **Smoke-test ONE agent** (@mention it) before trusting all five. Watch the DO
-   build log (compile gate) and the `[run-agent] … model=… auth_tag=…` startup line.
+## ⚠️ SECURITY — rotate keys before/at load into Bitwarden SM
+The 12 secrets (5 `*_NSEC`, `CLAUDE_CODE_OAUTH_TOKEN`, `CODEX_AUTH_JSON`, 5 `*_AUTH_TAG`)
+were **pasted into a chat transcript this session → treat as exposed → rotate.**
+- **Claude token:** re-run `claude setup-token`.
+- **Codex:** `codex login` → re-encode `~/.codex/auth.json`.
+- **5 agent nsecs (cascade):** new keys → new pubkeys → regenerate allowlists (`app.yaml`
+  + `docker-compose.yml`) AND the 5 auth tags (`tools/gen_auth_tags.py`) → update Bitwarden SM.
+- **Owner key:** if rotated, update `EXPECTED_OWNER` in `tools/gen_auth_tags.py`,
+  `BUZZ_ACP_AGENT_OWNER`, and regenerate ALL auth tags (they're signed by the owner key).
+- Also: delete `/workspace/secret.txt` (leaked plaintext, outside the repo).
 
-## ⚠️ Open questions the smoke test must answer
-- **Model slugs:** does `claude-opus-4-8` / `gpt-5.5` get accepted? (`[1m]` NOT pinned.)
-- **Adapter CLIs:** do `claude-agent-acp` / `codex-acp` need the underlying `claude`/`codex` CLIs?
-- **Relay membership:** the auth tags are now generated + wired, so if the relay requires
-  NIP-OA membership it's covered. Watch for `restricted: not a relay member` (tag issue)
-  vs `pubkey not in allowlist` (needs the operator to add the pubkeys — a tag won't fix that).
-- **Codex fragility:** `CODEX_AUTH_JSON` may break on redeploy (token rotation + ephemeral
-  fs). Fixes: re-`codex login` → refresh secret; or persistent Droplet volume; or switch
-  the 2 Codex agents to Claude; or `OPENAI_API_KEY`.
-
-## Cost/limits watch (first day)
-Full mesh + parallelism 2 + high effort = real token/subscription usage. Watch your
-Claude/ChatGPT plan limits; they can throttle.
+## Key learnings (so we don't re-derive them)
+- **Codex needs an isolated `CODEX_HOME` per agent** — shared `~/.codex` → sqlite state
+  collision. `run-agent.sh` sets `CODEX_HOME=~/.codex-<ROLE>` + forces Codex parallelism 1.
+- **buzz self-heals crashes but NOT memory.** 3-layer restart (buzz-acp respawn + circuit
+  breaker 3/60s→5min cooldown → supervisord → DO container). No RSS monitoring, agent
+  subprocess stays resident (idle_timeout is per-turn). So OOM is on you: size the host.
+- **Context-full is handled:** Claude Code auto-compacts; base prompt says resume silently;
+  durable memory lives on the relay; `BUZZ_ACP_CONTEXT_MESSAGE_LIMIT` (12) bounds history.
+- **Presence (the green light)** = `kind:20001`, self-published every 30s (60s TTL). It's a
+  *readout* of the process state, not a switch — you can't toggle an agent via presence.
+- **On-demand agents** explored (dispatcher watches team channel → `supervisorctl start/stop`;
+  or AWS Fargate scale-to-zero). Deferred — decided local-always-on is simpler for now.
+  A sleeping agent can only be woken via a **channel @mention** (DMs are E2E + `#p`-gated,
+  invisible to any dispatcher).
 
 ## Key file map
-`Dockerfile` `run-agent.sh` `supervisord.conf` `app.yaml` `prompts/`
-`templates/env.example` (public env template + agent pubkeys as comments; copy to
-`templates/.env` to fill secrets) · `templates/codex-auth.example.json`
-`tools/gen_auth_tags.py` · `README.md` (full how-to) · `resume.md` (this).
+`Dockerfile` `run-agent.sh` `supervisord.conf` `app.yaml` (DO path) ·
+`docker-compose.yml` `start.sh` (local path) · `prompts/` ·
+`templates/env.example` `templates/codex-auth.example.json` · `tools/gen_auth_tags.py` ·
+`README.md` (full how-to) · `resume.md` (this).

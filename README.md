@@ -41,7 +41,9 @@ All 5 connect out to wss://yc2897.communities.buzz.xyz and authenticate with the
 | `run-agent.sh` | Per-role launcher: runtime, model, effort, prompt, parallelism, auth, and kind:0 profile publish |
 | `supervisord.conf` | Runs all 5 agents, restarts any that crash |
 | `prompts/*.md` | The 5 system prompts |
-| `app.yaml` | DO App Platform spec — ONE Worker |
+| `app.yaml` | DO App Platform spec — ONE Worker (cloud path; needs ≥2 GB, see below) |
+| `docker-compose.yml` | Local run (Docker Desktop): non-secret config inline, secrets injected at runtime |
+| `start.sh` | Local one-command start: pulls the 12 secrets from Bitwarden Secrets Manager → `docker compose up -d` |
 | `templates/codex-auth.example.json` | Template for the Codex token file (safe to commit) |
 | `templates/env.example` | Committed template of the DO env vars (public values + agent pubkeys as comments; copy to `.env` to fill secrets) |
 | `agent-snapshots/*.agent.json` | Desktop-import copies (source of the prompts; DO doesn't use them) |
@@ -60,7 +62,38 @@ All 5 connect out to wss://yc2897.communities.buzz.xyz and authenticate with the
 - **Codex agents** → `CODEX_AUTH_JSON`, base64 of your `~/.codex/auth.json` (ChatGPT subscription).
   ⚠️ Fragile — see the caveat below. *(Alternative: `OPENAI_API_KEY`.)*
 
-## Setup
+## Run locally (Docker Desktop — recommended for personal use)
+
+Simplest and cheapest: run the one container on a spare computer. Plenty of RAM (no
+cloud memory cap → no OOM), **$0 cloud cost**, agents only dial *out* to the relay
+(no inbound/networking setup). Just keep the machine awake.
+
+Secrets are injected **at runtime** from Bitwarden Secrets Manager — never written to
+disk or baked into the image.
+
+**Once:** install `docker`, `bws` (Bitwarden Secrets Manager CLI), `jq`. In Bitwarden
+Secrets Manager create a project + a machine account (read on that project), and add
+the **12 secrets** with keys = the env-var names. Then set the bootstrap values in
+your shell/keychain:
+```bash
+export BWS_ACCESS_TOKEN=...   # machine-account token
+export BWS_PROJECT_ID=...     # the project holding the 12 secrets
+```
+
+**Every time (one command):**
+```bash
+./start.sh            # pull secrets from Bitwarden → docker compose up -d
+docker compose down   # stop
+```
+First run builds the image locally (works at home; no corporate TLS proxy). After you
+publish to GHCR, swap `build: .` → `image: ghcr.io/yc2897/buzz-ai:latest` in
+`docker-compose.yml` to pull instead of build.
+
+## Deploy on DigitalOcean (cloud alternative)
+
+> ⚠️ **Sizing lesson:** 512 MB OOMs — the container crash-loops when agents get busy
+> (memory spikes past the cap during a turn). Use **≥2 GB** (4 GB comfortable). buzz
+> restarts crashed agents but does **not** self-manage memory; size the host for the peak.
 
 1. **Push this dir to the private repo** `yc2897/buzz-ai`, branch `v0` (a fork of a
    public repo can't be private — this is a standalone private repo referencing
