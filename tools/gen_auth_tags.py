@@ -14,15 +14,15 @@ Faithful to block/buzz  crates/buzz-sdk/src/nip_oa.rs:
 import hashlib, os, getpass, sys, json
 
 # ---- expected owner pubkey (x-only, hex) — sanity check the decoded secret ----
-EXPECTED_OWNER = "f6e23876ed6c7c82486c371a0f577f08c3d7025008a35900be0b7129757a1122"
+EXPECTED_OWNER = "a4753e3ba9c4c812a052dfe4e414e14469d3c60d09dbd07f76d3d70236445826"
 
-# ---- the 5 agents: DO-secret-name -> agent pubkey (hex), from publickeys.txt ----
+# ---- the 5 agents: env-var name -> agent pubkey (hex) ----
 AGENTS = [
-    ("CAREER_AUTH_TAG",      "73def8e8c09b32f6702cc59399a450c9441099962becd2855551fceaa8dc7a35"),
-    ("OPERATIONS_AUTH_TAG",  "470eb7cb7f04caef853a7f9e0eb03f2d9a9ed53a2fd1bd9d995864492d41ffc6"),
-    ("KNOWLEDGE_AUTH_TAG",   "9f432ab55996b6ed230e69425f4330d9ca2d21e2598acd24450197e8f068a01c"),
-    ("REDTEAM_AUTH_TAG",     "ac959d5b75cde87e7f3cff3359aa0f08a37177cae8f847a9bd02a2cf6cad6845"),
-    ("ENGINEERING_AUTH_TAG", "a294106f364b8cf1a0237b122defbcee31cc149a00c910a791b0d71c4b234075"),
+    ("CAREER_AUTH_TAG",      "3dcfbb41070270812e49eb8eb92d2c31af7fe0de2740b66cdc430cfa0aae23ee"),
+    ("OPERATIONS_AUTH_TAG",  "3d837d79bb1ec4e447410b8f10782f0d0c03f0eabed4813e91d2b76316136dd8"),
+    ("KNOWLEDGE_AUTH_TAG",   "af2ca0a132be35ce28646ffb31a2a252aa3471d496d688b6a7469d4b802d0aa7"),
+    ("REDTEAM_AUTH_TAG",     "1e63f11a00e41f021d319a97748d55445dae2bdec899f5093947e4c465f0317e"),
+    ("ENGINEERING_AUTH_TAG", "0f6212cdd76e9aaa237f6b733ffa842da40dc502a22cbcf5eceb390ec691bb0e"),
 ]
 CONDITIONS = ""  # empty = no expiry / no restrictions (matches every call site upstream)
 
@@ -200,7 +200,8 @@ def main():
 
     print(f"\n[ok] all 5 signatures self-verified against BIP-340.")
     print(f"[ok] full values written to: {out_path}  (chmod 600)")
-    print("     -> copy each into its DigitalOcean secret + Bitwarden, then delete this file.")
+    print("     -> store each in Bitwarden as buzz_yc2897_agent_<slug>_auth_tag")
+    print("        (the [\"auth\",…] array ONLY, no NAME= prefix), then delete this file.")
 
 if __name__ == "__main__":
     main()

@@ -11,7 +11,7 @@
 #   CAREER, OPERATIONS, KNOWLEDGE  -> claude-agent-acp (Claude Code)
 #   REDTEAM, ENGINEERING           -> codex-acp        (Codex / GPT)
 #
-# Per-role env vars (set in DO):
+# Per-role env vars (set by start.sh via tools/map_secrets.py):
 #   <ROLE>_NSEC       (SECRET) the agent's Nostr private key    — REQUIRED
 #   <ROLE>_ALLOWLIST  comma-separated 64-hex pubkeys it obeys   — optional
 #   <ROLE>_AUTH_TAG   (SECRET) NIP-OA owner attestation, ["auth",...] JSON;
@@ -26,7 +26,7 @@ set -euo pipefail
 ROLE="${1:?usage: run-agent.sh <ROLE>}"
 PROMPT_DIR="/opt/buzz-prompts"
 
-# Model + effort defaults — override in DO without editing this file.
+# Model + effort defaults — override via docker-compose.yml without editing this file.
 CLAUDE_MODEL="${CLAUDE_MODEL:-claude-opus-4-8}"
 CODEX_MODEL="${CODEX_MODEL:-gpt-5.5}"
 CLAUDE_EFFORT="${CLAUDE_EFFORT:-high}"

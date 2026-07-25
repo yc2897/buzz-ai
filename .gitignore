@@ -1,4 +1,4 @@
-# Never commit secrets — nsec keys and API keys belong in DO's secret env vars.
+# Never commit secrets — nsec keys and API keys belong in Bitwarden Secrets Manager.
 .env
 .env.*
 *.nsec
@@ -22,3 +22,4 @@ owner_key*
 .DS_Store
 target/
 node_modules/
+__pycache__/

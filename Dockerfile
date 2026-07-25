@@ -1,8 +1,8 @@
 # Buzz agents image — 5 Claude Code agents under one supervisor.
 #
-# One DigitalOcean Worker runs this image. Inside it, `supervisord` (the
+# One container runs this image. Inside it, `supervisord` (the
 # "keep-everything-running" program) launches all 5 agents and restarts any
-# that crash. DO only watches supervisord; supervisord watches the agents.
+# that crash. Docker only watches supervisord; supervisord watches the agents.
 #
 # Only two upstream crates are built (buzz-acp = harness, buzz = the CLI the
 # agent uses to post/read). Everything else (the relay) is hosted by Block.
@@ -56,5 +56,5 @@ RUN sed -i 's/\r$//' /usr/local/bin/run-agent.sh /etc/supervisor/agents.conf \
 USER agent
 WORKDIR /home/agent
 
-# The ONE program DO runs. supervisord then starts + babysits the 5 agents.
+# The ONE program the container runs. supervisord starts + babysits the 5 agents.
 CMD ["supervisord", "-c", "/etc/supervisor/agents.conf"]

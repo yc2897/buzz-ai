@@ -1,7 +1,7 @@
 # buzz-ai — local single-host run (Docker Desktop).
-# Non-secret config is inline (safe to commit). The 12 SECRETS are NOT here — they
-# are injected at runtime from Bitwarden Secrets Manager via start.sh, and passed
-# through by name (the bare entries under "secrets, injected at runtime").
+# Model/relay config is inline (safe to commit). NO secret and NO pubkey is here —
+# both are injected at runtime from Bitwarden Secrets Manager via start.sh, and passed
+# through by name (every bare entry below, i.e. a name with no "=value").
 #
 # Start:  ./start.sh          (fetches secrets from Bitwarden, then compose up)
 # Stop:   docker compose down
@@ -16,16 +16,22 @@ services:
     environment:
       # ── non-secret config (public — fine to commit) ──
       - BUZZ_RELAY_URL=wss://yc2897.communities.buzz.xyz
-      - BUZZ_ACP_AGENT_OWNER=f6e23876ed6c7c82486c371a0f577f08c3d7025008a35900be0b7129757a1122
       - CLAUDE_MODEL=claude-opus-4-8
       - CODEX_MODEL=gpt-5.5
       - CLAUDE_EFFORT=high
       - CODEX_EFFORT=high
-      - CAREER_ALLOWLIST=470eb7cb7f04caef853a7f9e0eb03f2d9a9ed53a2fd1bd9d995864492d41ffc6,9f432ab55996b6ed230e69425f4330d9ca2d21e2598acd24450197e8f068a01c,ac959d5b75cde87e7f3cff3359aa0f08a37177cae8f847a9bd02a2cf6cad6845,a294106f364b8cf1a0237b122defbcee31cc149a00c910a791b0d71c4b234075
-      - OPERATIONS_ALLOWLIST=73def8e8c09b32f6702cc59399a450c9441099962becd2855551fceaa8dc7a35,9f432ab55996b6ed230e69425f4330d9ca2d21e2598acd24450197e8f068a01c,ac959d5b75cde87e7f3cff3359aa0f08a37177cae8f847a9bd02a2cf6cad6845,a294106f364b8cf1a0237b122defbcee31cc149a00c910a791b0d71c4b234075
-      - KNOWLEDGE_ALLOWLIST=73def8e8c09b32f6702cc59399a450c9441099962becd2855551fceaa8dc7a35,470eb7cb7f04caef853a7f9e0eb03f2d9a9ed53a2fd1bd9d995864492d41ffc6,ac959d5b75cde87e7f3cff3359aa0f08a37177cae8f847a9bd02a2cf6cad6845,a294106f364b8cf1a0237b122defbcee31cc149a00c910a791b0d71c4b234075
-      - REDTEAM_ALLOWLIST=73def8e8c09b32f6702cc59399a450c9441099962becd2855551fceaa8dc7a35,470eb7cb7f04caef853a7f9e0eb03f2d9a9ed53a2fd1bd9d995864492d41ffc6,9f432ab55996b6ed230e69425f4330d9ca2d21e2598acd24450197e8f068a01c,a294106f364b8cf1a0237b122defbcee31cc149a00c910a791b0d71c4b234075
-      - ENGINEERING_ALLOWLIST=73def8e8c09b32f6702cc59399a450c9441099962becd2855551fceaa8dc7a35,470eb7cb7f04caef853a7f9e0eb03f2d9a9ed53a2fd1bd9d995864492d41ffc6,9f432ab55996b6ed230e69425f4330d9ca2d21e2598acd24450197e8f068a01c,ac959d5b75cde87e7f3cff3359aa0f08a37177cae8f847a9bd02a2cf6cad6845
+      # ── identity-derived, injected at runtime (bare = pass through from host env) ──
+      # NOT secret, but NOT hardcoded either: tools/map_secrets.py derives these from
+      # the pubkeys in Bitwarden, so Bitwarden is the single source of truth and a key
+      # rotation can't leave a stale pubkey behind in this file.
+      #   BUZZ_ACP_AGENT_OWNER  <- buzz_yc2897_public_hex
+      #   <ROLE>_ALLOWLIST      <- the OTHER four agents' _public_hex (full mesh)
+      - BUZZ_ACP_AGENT_OWNER
+      - CAREER_ALLOWLIST
+      - OPERATIONS_ALLOWLIST
+      - KNOWLEDGE_ALLOWLIST
+      - REDTEAM_ALLOWLIST
+      - ENGINEERING_ALLOWLIST
       # ── secrets, injected at runtime (bare = pass through from host env; set by start.sh) ──
       - CLAUDE_CODE_OAUTH_TOKEN
       - CODEX_AUTH_JSON
