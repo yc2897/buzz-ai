@@ -1,9 +1,9 @@
 # buzz-ai — local single-host run (Docker Desktop).
 # Model/relay config is inline (safe to commit). NO secret and NO pubkey is here —
-# both are injected at runtime from Bitwarden Secrets Manager via start.sh, and passed
+# both are injected at runtime from Bitwarden Secrets Manager via start.py, and passed
 # through by name (every bare entry below, i.e. a name with no "=value").
 #
-# Start:  ./start.sh          (fetches secrets from Bitwarden, then compose up)
+# Start:  python3 start.py    (fetches secrets from Bitwarden, then compose up)
 # Stop:   docker compose down
 
 services:
@@ -32,7 +32,7 @@ services:
       - KNOWLEDGE_ALLOWLIST
       - REDTEAM_ALLOWLIST
       - ENGINEERING_ALLOWLIST
-      # ── secrets, injected at runtime (bare = pass through from host env; set by start.sh) ──
+      # ── secrets, injected at runtime (bare = pass through from host env; set by start.py) ──
       - CLAUDE_CODE_OAUTH_TOKEN
       - CODEX_AUTH_JSON
       - CAREER_NSEC

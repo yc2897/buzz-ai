@@ -19,16 +19,17 @@ merge conflicts.
 
 ```
 You (CEO) ─ human
-├── Head of Career        (Claude Code · claude-opus-4-8)
-│   ├── Head of Knowledge          (Claude Code · claude-opus-4-8)
-│   ├── Head of Red Team           (Codex · gpt-5.5)
-│   └── Head of Engineering        (Codex · gpt-5.5)
-└── Head of Operations    (Claude Code · claude-opus-4-8)
+├── Career        (Claude Code · claude-opus-4-8)
+├── Operations    (Claude Code · claude-opus-4-8)
+├── Knowledge     (Claude Code · claude-opus-4-8)
+├── Red Team      (Codex · gpt-5.5)
+└── Engineering   (Codex · gpt-5.5)
 ```
 
-The hierarchy is only the **mental model** (baked into the prompts). For
-communication it's a **full mesh** — every agent can talk to every other, and you
-(owner) can always command any of them.
+**Flat by design.** All five report directly to you and none outranks another —
+the prompts say so explicitly. Communication is a **full mesh**: every agent can
+@mention every other to pull them into a problem, and you can command any of them.
+Structure and communication now match, so there's no hierarchy to keep in your head.
 
 ## How it runs
 
@@ -53,7 +54,7 @@ to them. They stay up whether or not it's open; `buzz` on the CLI works too.
 | `supervisord.conf` | Runs all 5 agents, restarts any that crash |
 | `prompts/*.md` | The 5 system prompts |
 | `docker-compose.yml` | The container spec: model/relay config inline; identity + secrets injected at runtime |
-| `start.sh` | One-command start: `bws` → `tools/map_secrets.py` → `docker compose up -d` |
+| `start.py` | **The launcher** — one command on every platform: `bws` → `tools/map_secrets.py` → `docker compose up -d`. No bash, no `jq`, no `eval` |
 | `templates/codex-auth.example.json` | Template for the Codex token file (safe to commit) |
 | `templates/env.example` | Committed reference of every env var the container expects (public values + agent pubkeys as comments) |
 | `agent-snapshots/*.agent.json` | Desktop-import copies (source of the prompts; the container doesn't use them) |
@@ -86,7 +87,7 @@ Run the one container on a machine you keep awake. Plenty of RAM (no cloud memor
 Secrets are injected **at runtime** from Bitwarden Secrets Manager — never written to
 disk or baked into the image.
 
-**Once:** install `docker`, `bws` (Bitwarden Secrets Manager CLI), `jq`. In Bitwarden
+**Once:** install `docker` and `bws` (Bitwarden Secrets Manager CLI). In Bitwarden
 Secrets Manager create a project + a machine account (read on that project), and add
 your secrets — the names don't have to match the env vars, `tools/map_secrets.py`
 handles that. Then set the bootstrap values in your shell/keychain:
@@ -97,9 +98,36 @@ export BWS_PROJECT_ID=...     # the project holding the secrets
 
 **Every time (one command):**
 ```bash
-./start.sh            # pull secrets from Bitwarden → docker compose up -d
-docker compose down   # stop
+python3 start.py            # start  (same command on macOS, Linux and Windows)
+python3 start.py --check    # validate secrets, start nothing
+python3 start.py --down     # stop
 ```
+
+### Cross-platform notes
+
+The launcher is `start.py` — Python rather than shell, for three reasons that all bit us
+in practice:
+
+- **CRLF immunity.** A `.sh` checked out with Windows line endings cannot run *at all* —
+  the kernel looks for an interpreter named `bash\r` and fails before the first line, so
+  no guard inside the script could ever help. Python's parser accepts either ending.
+  `.gitattributes` pins LF as the real fix; `start.py` is the belt to that braces.
+- **No `jq`.** `bws`'s JSON is parsed natively, so that's one less dependency to install.
+- **No `eval`.** Secrets go straight from `bws` into the `docker compose` subprocess
+  environment. They never touch a shell command line, your shell history, or the
+  environment of anything else you run in that terminal afterwards.
+
+**On Windows, use WSL2** (Docker Desktop uses it as the backend anyway). Clone into the
+WSL filesystem — `~/buzz-ai`, not `/mnt/c/...` — which avoids CRLF entirely and is far
+faster for the Rust build. If you already have a CRLF checkout, repair it once with
+`sed -i 's/\r$//' *.py tools/*.py`.
+
+The image is **architecture-specific**: npm resolves the Claude SDK binary at build time
+(`…-linux-arm64` on Apple Silicon, `…-linux-x64` on a PC). Don't copy an image between
+machines — let `build: .` rebuild and it resolves correctly on its own.
+
+⚠️ **Never run two machines at once.** Both hold the same five nsecs, so you'd get every
+message answered twice plus racing writes to the same memory slugs. `--down` one first.
 First run builds the image locally (several minutes — a real Rust compile). A build
 behind a TLS-inspecting corporate proxy will fail at the crates.io step; build at home.
 If you later publish to GHCR, swap `build: .` → `image: ghcr.io/yc2897/buzz-ai:latest`
@@ -125,7 +153,7 @@ because it was never added to the channel.
 
 ## Taking upstream updates
 Bump `BUZZ_REF` (the `Dockerfile` `ARG`) from `v0.4.22` to a newer **tag**, then
-`docker compose build && ./start.sh`. Never point at `main`.
+`docker compose build && python3 start.py`. Never point at `main`.
 
 ## Re-login loops (when auth breaks)
 - **Claude:** token lasts ~1 year → re-run `claude setup-token`, update the
@@ -133,7 +161,7 @@ Bump `BUZZ_REF` (the `Dockerfile` `ARG`) from `v0.4.22` to a newer **tag**, then
 - **Codex:** if it stops working → `codex login` on your Mac → update the five
   `codex_*` secrets in Bitwarden from the new `~/.codex/auth.json`.
 
-Either way: `docker compose down && ./start.sh` to pick up the new values.
+Either way: `python3 start.py --down && python3 start.py` to pick up the new values.
 
 ## Rotating credentials (runbook)
 
@@ -265,7 +293,7 @@ Bitwarden (plus `templates/env.example` for reference).
    git add templates/env.example tools/gen_auth_tags.py
    git commit -m "Rotate agent keys: new pubkeys, allowlists, auth tags" && git push origin v0
    ```
-4. `rm tools/auth_tags.local`, then `./start.sh`.
+4. `rm tools/auth_tags.local`, then `python3 start.py`.
 5. **Add the new agents to a channel.** Fresh pubkeys are members of nothing, so they log
    `discovered 0 channel(s) — agent will sit idle`. They're subscribed to membership
    notifications, so adding them takes effect live (`lib.rs:1892`) — no restart. Then

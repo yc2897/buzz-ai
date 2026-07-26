@@ -4,22 +4,21 @@
 `bws` names secrets descriptively (`buzz_yc2897_agent_career_private`); the runtime
 wants role-shaped names (`CAREER_NSEC`). This script is the adapter between them.
 
-It reads everything from the ENVIRONMENT (bws has already exported the raw names),
-writes NOTHING to disk, and prints shell `export` lines on stdout for the caller to
-eval. Secret values only ever appear on stdout as shell-quoted exports — never in a
-log line, an error message, or an argv.
+It reads the bws-named values from the ENVIRONMENT and writes NOTHING to disk.
+Secret values only ever leave via stdout as shell-quoted exports — never in a log
+line, an error message, or an argv.
 
-Usage (host side — see start.sh):
+Normally you don't run this directly: `start.py` imports `collect()` and passes the
+result straight into the `docker compose` subprocess, so no shell is involved at all.
 
-    # 1. load the raw bws names into this shell
+    python3 start.py --check          # the usual way to validate
+
+Standalone use, if you want the vars in your own shell (note this leaves secrets in
+that shell's environment, inherited by everything you run afterwards):
+
     while IFS=$'\t' read -r k v; do export "$k=$v"; done \
       < <(bws secret list "$BWS_PROJECT_ID" | jq -r '.[]|[.key,.value]|@tsv')
-
-    # 2. project them onto the names the container expects
     eval "$(python3 tools/map_secrets.py)"
-
-    # or validate first, without putting anything on your terminal:
-    python3 tools/map_secrets.py --check
 
 What it emits:
 
@@ -186,8 +185,15 @@ def build_codex_auth_json() -> str | None:
     return base64.b64encode(json.dumps(auth).encode()).decode()
 
 
-def main() -> int:
-    check_only = "--check" in sys.argv[1:]
+def collect() -> tuple[list[tuple[str, str]], list[str]]:
+    """Build the (env-var, value) pairs from the bws-named vars in os.environ.
+
+    Returns (exports, problems). `exports` is only trustworthy when `problems`
+    is empty — callers must check. Importable so start.py can reuse the mapping
+    and validation without going through a shell.
+    """
+    global problems
+    problems = []
     exports: list[tuple[str, str]] = []
 
     owner_hex = get(OWNER_PUBKEY_SECRET)
@@ -235,23 +241,31 @@ def main() -> int:
     if codex:
         exports.append(("CODEX_AUTH_JSON", codex))
 
-    if problems:
+    return exports, problems
+
+
+def report_problems(problems: list[str]) -> None:
+    """Print the problem list (names only, never values) to stderr."""
+    print(f"[map_secrets] {len(problems)} problem(s) — nothing exported:", file=sys.stderr)
+    for p in problems:
+        print(f"  - {p}", file=sys.stderr)
+    if any("_auth_tag" in p for p in problems):
         print(
-            f"[map_secrets] {len(problems)} problem(s) — nothing exported:", file=sys.stderr
+            "\n  The 5 auth tags must be minted on this Mac (they need your OWNER\n"
+            "  PRIVATE key — public keys cannot produce one) and then stored in\n"
+            "  Bitwarden as:\n"
+            + "".join(f"    {PREFIX}_agent_{slug}_auth_tag\n" for _, slug in ROLES)
+            + "  Mint them with:  python3 tools/gen_auth_tags.py",
+            file=sys.stderr,
         )
-        for p in problems:
-            print(f"  - {p}", file=sys.stderr)
-        if any("_auth_tag" in p for p in problems):
-            print(
-                "\n  The 5 auth tags must be minted on this Mac (they need your OWNER\n"
-                "  PRIVATE key — public keys cannot produce one) and then stored in\n"
-                "  Bitwarden as:\n"
-                + "".join(
-                    f"    {PREFIX}_agent_{slug}_auth_tag\n" for _, slug in ROLES
-                )
-                + "  Mint them with:  python3 tools/gen_auth_tags.py",
-                file=sys.stderr,
-            )
+
+
+def main() -> int:
+    check_only = "--check" in sys.argv[1:]
+    exports, problems = collect()
+
+    if problems:
+        report_problems(problems)
         return 1
 
     if check_only:

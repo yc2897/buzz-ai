@@ -11,7 +11,7 @@
 #   CAREER, OPERATIONS, KNOWLEDGE  -> claude-agent-acp (Claude Code)
 #   REDTEAM, ENGINEERING           -> codex-acp        (Codex / GPT)
 #
-# Per-role env vars (set by start.sh via tools/map_secrets.py):
+# Per-role env vars (set by start.py via tools/map_secrets.py):
 #   <ROLE>_NSEC       (SECRET) the agent's Nostr private key    — REQUIRED
 #   <ROLE>_ALLOWLIST  comma-separated 64-hex pubkeys it obeys   — optional
 #   <ROLE>_AUTH_TAG   (SECRET) NIP-OA owner attestation, ["auth",...] JSON;
@@ -33,11 +33,11 @@ CLAUDE_EFFORT="${CLAUDE_EFFORT:-high}"
 CODEX_EFFORT="${CODEX_EFFORT:-high}"
 
 case "${ROLE}" in
-  CAREER)      RUNTIME="claude-agent-acp"; PROMPT="${PROMPT_DIR}/career.md";      NAME="Head of Career";      ABOUT="Mentor · resume · interview · career strategy. Leads the Career team; reports to the CEO." ;;
-  OPERATIONS)  RUNTIME="claude-agent-acp"; PROMPT="${PROMPT_DIR}/operations.md";  NAME="Head of Operations";  ABOUT="Planning, coordination, tracking, logistics. Reports to the CEO." ;;
-  KNOWLEDGE)   RUNTIME="claude-agent-acp"; PROMPT="${PROMPT_DIR}/knowledge.md";   NAME="Head of Knowledge";   ABOUT="Learning & research. On the Career team; reports to Head of Career." ;;
-  REDTEAM)     RUNTIME="codex-acp";        PROMPT="${PROMPT_DIR}/redteam.md";     NAME="Head of Red Team";    ABOUT="Constructive devil's advocate — stress-tests plans and decisions. On the Career team; reports to Head of Career." ;;
-  ENGINEERING) RUNTIME="codex-acp";        PROMPT="${PROMPT_DIR}/engineering.md"; NAME="Head of Engineering"; ABOUT="Code, systems, debugging, technical evaluation. On the Career team; reports to Head of Career." ;;
+  CAREER)      RUNTIME="claude-agent-acp"; PROMPT="${PROMPT_DIR}/career.md";      NAME="Career";      ABOUT="Mentor · resume · interview · career strategy. Reports to the CEO." ;;
+  OPERATIONS)  RUNTIME="claude-agent-acp"; PROMPT="${PROMPT_DIR}/operations.md";  NAME="Operations";  ABOUT="Planning, coordination, tracking, logistics. Reports to the CEO." ;;
+  KNOWLEDGE)   RUNTIME="claude-agent-acp"; PROMPT="${PROMPT_DIR}/knowledge.md";   NAME="Knowledge";   ABOUT="Learning & research. Reports to the CEO." ;;
+  REDTEAM)     RUNTIME="codex-acp";        PROMPT="${PROMPT_DIR}/redteam.md";     NAME="Red Team";    ABOUT="Constructive devil's advocate — stress-tests plans and decisions. Reports to the CEO." ;;
+  ENGINEERING) RUNTIME="codex-acp";        PROMPT="${PROMPT_DIR}/engineering.md"; NAME="Engineering"; ABOUT="Code, systems, debugging, technical evaluation. Reports to the CEO." ;;
   *) echo "run-agent: unknown role '${ROLE}'" >&2; exit 1 ;;
 esac
 
