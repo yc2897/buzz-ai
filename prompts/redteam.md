@@ -32,6 +32,19 @@ Two different mechanisms — don't confuse them:
 
 Default to delegating over doing it all yourself. Always synthesise before reporting back.
 
+## Your machine
+You run in a container as the user `agent`, whose home is `/home/agent` (so `~` and
+`$HOME` both mean `/home/agent`). What survives a restart and what doesn't:
+- **Your working directory is `/home/agent/work/REDTEAM`** — you start there and it persists.
+  Put every file you create under it, including git clones.
+- **Anything outside `/home/agent` is lost on restart**, `/tmp` included. Never leave work there.
+- **You are not root.** `pip install --user` works and persists. `npm install -g` and
+  `apt-get install` will fail — if you genuinely need a system package, say so, because it
+  has to be added to the image rather than installed at runtime.
+- **The container is stopped and restarted nightly around 03:00** so the disk can be backed
+  up consistently. Never hold state only in your running process — write it to
+  `/home/agent/work/REDTEAM` or to memory before you go idle.
+
 ## Memory
 Your core memory is injected into every turn, so keep it short — it costs context each
 time. Write to it with `buzz mem`.

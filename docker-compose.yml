@@ -13,6 +13,20 @@ services:
     build: .
     image: buzz-ai:local
     restart: unless-stopped
+    volumes:
+      # Persistent disk for the agents: git clones, downloaded files, pip --user
+      # installs, per-role work dirs. A NAMED volume (managed by Docker, inside the
+      # Docker VM) — NOT a bind mount, so it exposes nothing from your Mac.
+      # System-wide installs still won't persist: /usr/local is root-owned and the
+      # agents run as uid 1001. That's deliberate. Add to the Dockerfile instead.
+      - agent-home:/home/agent
+    labels:
+      # Tells the backup sidecar to stop this container before archiving and start
+      # it again after. Without this the archive is taken from a live filesystem and
+      # can be torn — a file written mid-read lands in the tarball half-old/half-new,
+      # and Codex's SQLite state under ~/.codex-<ROLE> is exactly the sort of file
+      # that corrupts that way.
+      - docker-volume-backup.stop-during-backup=true
     environment:
       # ── non-secret config (public — fine to commit) ──
       - BUZZ_RELAY_URL=wss://yc2897.communities.buzz.xyz
@@ -45,3 +59,53 @@ services:
       - KNOWLEDGE_AUTH_TAG
       - REDTEAM_AUTH_TAG
       - ENGINEERING_AUTH_TAG
+
+  # ── Scheduled, consistent backups of the agents' disk ───────────────────────
+  # Stops `agents`, archives the volume, restarts it, prunes old archives.
+  # Docs: https://offen.github.io/docker-volume-backup/
+  #
+  # ⚠️ TRUST NOTE: this needs the Docker socket, which IS Docker's control API —
+  # anything that can talk to it can ask Docker to run a privileged container, so
+  # socket access is effectively root on the Docker VM (not on macOS: Docker Desktop
+  # runs containers inside a LinuxKit VM, so that's a second boundary). It is
+  # deliberately given to THIS sidecar and not to `agents`, and the sidecar exposes
+  # no ports, so the agents cannot reach it. The socket is mounted `:ro` to match the
+  # upstream recipe, but do not mistake that for a boundary: talking to a socket is a
+  # socket operation, not a file write, so read-only still permits the entire API.
+  # Pin the tag; treat an image bump as a trust decision.
+  # If you want to narrow it further, a path-filtering proxy (wollomatic/socket-proxy)
+  # can allow only POST /containers/<id>/stop|start. Note tecnativa/docker-socket-proxy
+  # filters by API *section*, so CONTAINERS+POST would still allow /containers/create
+  # — which is enough to launch a privileged container, i.e. no real gain here.
+  backup:
+    image: offen/docker-volume-backup:v2.48.2
+    restart: unless-stopped
+    environment:
+      - BACKUP_CRON_EXPRESSION=0 3 * * *          # nightly at 03:00
+      - BACKUP_FILENAME=buzz-ai-%Y%m%d-%H%M%S.tar.gz
+      - BACKUP_LATEST_SYMLINK=buzz-ai-latest.tar.gz   # restore without hunting a timestamp
+      - BACKUP_PRUNING_PREFIX=buzz-ai-
+      - BACKUP_RETENTION_DAYS=14
+      # Never archive credentials. run-agent.sh writes the decoded ChatGPT tokens to
+      # ~/.codex-<ROLE>/auth.json on every start, and they're re-created from
+      # Bitwarden anyway — so they must not travel.
+      # Also skip regenerable caches. Codex downloads a ~20 MB curated plugin
+      # catalogue into each CODEX_HOME on startup (so twice, once per Codex agent);
+      # Claude Code caches plugin payloads the same way under plugins/cache. Left in,
+      # they were ~73 MB of every archive — all of it re-downloadable.
+      - BACKUP_EXCLUDE_REGEXP=(^|/)(auth|credentials)\.json$|(^|/)\.credentials\.json$|(^|/)\.bash_history$|(^|/)(node_modules|\.venv|__pycache__|\.cache)/|(^|/)\.(codex|claude)-[^/]+/(cache|plugins/cache)/
+      # Encrypt before anything leaves the machine. Bare = passed through from your
+      # shell if set; unset means unencrypted local archives only.
+      - AGE_PASSPHRASE
+      # To ship offsite, set these (and keep AGE_PASSPHRASE):
+      # - AWS_S3_BUCKET_NAME=...
+      # - AWS_ACCESS_KEY_ID=...
+      # - AWS_SECRET_ACCESS_KEY=...
+      # - AWS_ENDPOINT=...            # e.g. Cloudflare R2 / Backblaze B2
+    volumes:
+      - agent-home:/backup/agent-home:ro   # source, read-only
+      - ./backups:/archive                 # destination on your Mac (git-ignored)
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+volumes:
+  agent-home:

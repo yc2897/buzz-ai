@@ -75,6 +75,14 @@ if [ "${RUNTIME}" = "claude-agent-acp" ]; then
     echo "run-agent: Claude agents need CLAUDE_CODE_OAUTH_TOKEN (subscription) or ANTHROPIC_API_KEY (API)" >&2
     exit 1
   fi
+  # Per-role Claude config dir. Without this all three Claude agents share
+  # ~/.claude — one plugin set, and one auto-memory directory that Career,
+  # Operations and Knowledge would all write to as if it were their own. With a
+  # persistent volume that cross-contamination would become permanent rather
+  # than being wiped each restart.
+  export CLAUDE_CONFIG_DIR="${HOME}/.claude-${ROLE}"
+  mkdir -p "${CLAUDE_CONFIG_DIR}"
+
   export ANTHROPIC_MODEL="${CLAUDE_MODEL}"
   export CLAUDE_CODE_EFFORT_LEVEL="${CLAUDE_EFFORT}"
   MODEL_SHOWN="${CLAUDE_MODEL} effort=${CLAUDE_EFFORT}"
@@ -112,6 +120,14 @@ if [ -n "${allow}" ]; then
 else
   export BUZZ_ACP_RESPOND_TO="owner-only"
 fi
+
+# Per-role working directory on the persistent volume. buzz-acp takes the agent's
+# cwd from std::env::current_dir() (upstream lib.rs:1543) and passes it to
+# session/new, so this is what each agent sees as its workspace. Without it all
+# five share /home/agent and would git-clone on top of each other.
+WORK="${HOME}/work/${ROLE}"
+mkdir -p "${WORK}"
+cd "${WORK}"
 
 # Publish this agent's kind:0 profile so it shows up named, not as a raw pubkey.
 # Idempotent (kind:0 is replaceable); non-fatal so a relay hiccup never blocks start.

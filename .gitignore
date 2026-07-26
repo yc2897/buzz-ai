@@ -23,3 +23,6 @@ owner_key*
 target/
 node_modules/
 __pycache__/
+
+# Volume backups written by the docker-volume-backup sidecar.
+backups/

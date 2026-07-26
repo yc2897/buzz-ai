@@ -45,22 +45,6 @@ All 5 connect out to wss://yc2897.communities.buzz.xyz and authenticate with the
 The Buzz desktop app is **not** required for the agents to run — it's just how you talk
 to them. They stay up whether or not it's open; `buzz` on the CLI works too.
 
-## Files
-
-| File | What it is |
-|---|---|
-| `Dockerfile` | Builds `buzz-acp` + `buzz` from pinned `v0.4.22`; installs Node, the Claude+Codex adapters, `supervisord` |
-| `run-agent.sh` | Per-role launcher: runtime, model, effort, prompt, parallelism, auth, and kind:0 profile publish |
-| `supervisord.conf` | Runs all 5 agents, restarts any that crash |
-| `prompts/*.md` | The 5 system prompts |
-| `docker-compose.yml` | The container spec: model/relay config inline; identity + secrets injected at runtime |
-| `start.py` | **The launcher** — one command on every platform: `bws` → `tools/map_secrets.py` → `docker compose up -d`. No bash, no `jq`, no `eval` |
-| `templates/codex-auth.example.json` | Template for the Codex token file (safe to commit) |
-| `templates/env.example` | Committed reference of every env var the container expects (public values + agent pubkeys as comments) |
-| `agent-snapshots/*.agent.json` | Desktop-import copies (source of the prompts; the container doesn't use them) |
-| `tools/gen_auth_tags.py` | Mints the 5 `*_AUTH_TAG` NIP-OA owner attestations (needs your owner key + the pubkeys) |
-| `tools/map_secrets.py` | Host-side adapter: maps the Bitwarden secret names onto the env vars the runtime wants, assembles `CODEX_AUTH_JSON`, derives the allowlists, and verifies keypairs + auth tags before anything starts |
-
 ## What's already wired
 - **Relay:** `wss://yc2897.communities.buzz.xyz`
 - **Owner:** `a475…5826` (so you can always command any agent)
@@ -136,6 +120,125 @@ in `docker-compose.yml` to pull instead of build.
 ⚠️ **Never pass `BWS_ACCESS_TOKEN` into the container.** `bws` runs on your Mac; the
 container receives only the finished values. A token inside the container is readable
 by every agent, and it keeps working after the container is gone.
+
+## Folder structure
+
+### This repo (on your Mac)
+
+```text
+buzz-ai/
+├── start.py                    THE launcher, every platform: bws → map_secrets →
+│                               docker compose up. No bash, no jq, no eval
+├── docker-compose.yml          services, the agent-home volume, backup sidecar;
+│                               model/relay config inline, secrets injected at runtime
+├── Dockerfile                  builds buzz-acp + buzz from pinned v0.4.22; installs
+│                               Node, the Claude + Codex adapters, supervisord
+├── run-agent.sh                per-role launcher: runtime, model, effort, prompt,
+│                               cwd, parallelism, auth, kind:0 profile publish
+├── supervisord.conf            runs all 5 agents, restarts any that crash
+├── prompts/                    the 5 system prompts — COPYd into the image
+│   └── career.md · operations.md · knowledge.md · redteam.md · engineering.md
+├── tools/
+│   ├── map_secrets.py          Bitwarden names → runtime env vars; assembles
+│   │                           CODEX_AUTH_JSON, derives allowlists, and verifies
+│   │                           every keypair + auth tag before anything starts
+│   └── gen_auth_tags.py        mints the 5 NIP-OA auth tags (needs your owner key)
+├── templates/
+│   ├── env.example             reference: every env var the container expects
+│   └── codex-auth.example.json shape of ~/.codex/auth.json
+├── agent-snapshots/            desktop-import copies; systemPrompt/about are synced
+│                               from prompts/ and run-agent.sh (container ignores them)
+├── backups/                    ← git-ignored; the sidecar writes archives here
+├── .gitattributes              pins LF so a Windows checkout can't break the scripts
+├── .gitignore                  keeps secrets, auth_tags.local and backups/ out of git
+└── README.md
+```
+
+### Inside the container
+
+Only `/home/agent` is on the volume. Everything else comes from the image and **resets on
+every restart** — verified by writing to both and restarting.
+
+```text
+/                                        ← from the IMAGE, resets each restart
+├── usr/local/bin/{buzz,buzz-acp}          the two Rust binaries
+├── usr/local/lib/node_modules/            claude-agent-acp + codex-acp
+│   └── …/claude-agent-sdk-linux-arm64/    the real 260 MB claude binary
+├── opt/buzz-prompts/*.md                  copied from prompts/ at build time
+├── etc/supervisor/agents.conf             copied from supervisord.conf
+└── tmp/                                   EPHEMERAL — anything written here is lost
+
+/home/agent                              ← VOLUME agent-home — PERSISTS
+├── work/                                  role names are UPPERCASE (run-agent.sh $ROLE)
+│   ├── CAREER/                            cwd for Career — its git clones live here
+│   ├── OPERATIONS/  KNOWLEDGE/  REDTEAM/  ENGINEERING/
+├── .claude-CAREER/                        per-role: config, plugins, auto-memory
+├── .claude-OPERATIONS/   .claude-KNOWLEDGE/
+├── .codex-REDTEAM/                        Codex SQLite state + auth.json
+├── .codex-ENGINEERING/                    (auth.json is excluded from backups)
+└── .local/                                pip install --user lands here
+```
+
+**Practical consequence:** agents work in `~/work/<ROLE>`, so their clones and files persist.
+Anything an agent writes outside `/home/agent` — `/tmp`, a global npm install — is gone on
+restart. The agents can't write to `/usr/local` anyway (root-owned, they're uid 1001).
+
+## The agents' disk
+
+The agents have a persistent disk: the named volume `agent-home`, mounted at
+`/home/agent`. Git clones, downloaded files, `pip install --user` packages and work in
+progress all survive restarts.
+
+Each agent gets its own working directory, `~/work/<ROLE>`, because `buzz-acp` takes the
+agent's cwd from `current_dir()` — without that, all five would `git clone` into the same
+folder. Each Claude agent also gets its own `CLAUDE_CONFIG_DIR` (`~/.claude-<ROLE>`), which
+separates their plugins and their Claude Code auto-memory; sharing one `~/.claude` meant
+Career, Operations and Knowledge all wrote to the same memory directory.
+
+It's a **named volume, not a bind mount** — Docker manages it inside the Docker VM, so it
+exposes nothing from your Mac and the isolation described under *Things to remember* holds.
+
+**What still won't persist:** system-wide installs. `/usr/local` is root-owned and the
+agents run as uid 1001, so `npm install -g` and `apt-get install` both fail. That's the
+non-root sandboxing working as intended — if an agent genuinely needs a system package,
+add it to the `Dockerfile`.
+
+### Backups
+
+The `backup` sidecar ([offen/docker-volume-backup](https://offen.github.io/docker-volume-backup/))
+runs nightly at 03:00: it **stops `agents`, archives the volume, restarts it**, then prunes
+archives older than 14 days into `./backups/` (git-ignored).
+
+Stopping first is the point. Archiving a live filesystem gives a torn result — a file
+written mid-read lands in the tarball half-old and half-new, and Codex's SQLite state under
+`~/.codex-<ROLE>` corrupts exactly that way. Worth knowing that **busybox `tar` doesn't even
+warn**: it exits 0 on a changed file and writes a broken archive, so a hand-rolled
+`alpine`-based backup would fail silently. GNU tar at least exits 1.
+
+Credentials never enter an archive — `BACKUP_EXCLUDE_REGEXP` drops `auth.json`,
+`credentials.json` and `.bash_history`, plus `node_modules`/venvs/caches, which are
+regenerable and would bloat every run.
+
+**To ship offsite**, set `AGE_PASSPHRASE` in your shell (it passes through) and uncomment
+the `AWS_*` block — it also speaks WebDAV, Azure Blob, Dropbox, Google Drive and SSH.
+Encrypt first: the archive still holds everything your agents were working on.
+
+**Restore** — `BACKUP_LATEST_SYMLINK` means you don't need to look up a timestamp:
+```bash
+docker compose down
+docker run --rm -v buzz-ai_agent-home:/data -v "$PWD/backups":/in \
+  debian:stable-slim tar xzf /in/buzz-ai-latest.tar.gz -C /data
+python3 start.py
+```
+Use a dated filename instead of `-latest` to roll back to a specific night.
+
+> ⚠️ The sidecar mounts the **Docker socket**, which is Docker's control API — anything
+> that can talk to it can ask Docker to start a privileged container, so it amounts to root
+> on the Docker VM (not on macOS; the LinuxKit VM is a second boundary). It's given to the
+> sidecar and *not* to `agents`, and the sidecar exposes no ports, so your agents can't
+> reach it. Pin the tag and treat a version bump as a trust decision. The socket is mounted
+> `:ro` to match the upstream recipe, but that is not a boundary — talking to a socket isn't
+> a file write, so read-only still permits the whole API.
 
 ## If an agent seems unresponsive
 
