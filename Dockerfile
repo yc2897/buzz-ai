@@ -44,6 +44,11 @@ COPY --from=builder /src/target/release/buzz     /usr/local/bin/buzz
 COPY prompts          /opt/buzz-prompts
 COPY run-agent.sh     /usr/local/bin/run-agent.sh
 COPY supervisord.conf /etc/supervisor/agents.conf
+# Vendored skills (see skills/README.md). Kept OUT of /home/agent on purpose: that
+# path is a named volume, and a volume only seeds from the image the first time it
+# is created — after that, image updates would be invisible. run-agent.sh copies
+# the per-role subset in at every start instead, so the image stays authoritative.
+COPY skills           /opt/buzz-skills
 # Normalize line endings: a Windows checkout copies these as CRLF, which breaks
 # the bash shebang and the supervisord parser. Strip CR so the image is correct
 # regardless of the host that built it.

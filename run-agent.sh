@@ -32,12 +32,16 @@ CODEX_MODEL="${CODEX_MODEL:-gpt-5.5}"
 CLAUDE_EFFORT="${CLAUDE_EFFORT:-high}"
 CODEX_EFFORT="${CODEX_EFFORT:-high}"
 
+# SKILLS: which of /opt/buzz-skills this role gets. Every entry is paid for in
+# context on EVERY turn (its frontmatter is always resident; the body loads only
+# when the skill fires), so keep these lists short and justify additions.
+# See skills/README.md for what each one does and why the others were rejected.
 case "${ROLE}" in
-  CAREER)      RUNTIME="claude-agent-acp"; PROMPT="${PROMPT_DIR}/career.md";      NAME="Career";      ABOUT="Mentor · resume · interview · career strategy. Reports to the CEO." ;;
-  OPERATIONS)  RUNTIME="claude-agent-acp"; PROMPT="${PROMPT_DIR}/operations.md";  NAME="Operations";  ABOUT="Planning, coordination, tracking, logistics. Reports to the CEO." ;;
-  KNOWLEDGE)   RUNTIME="claude-agent-acp"; PROMPT="${PROMPT_DIR}/knowledge.md";   NAME="Knowledge";   ABOUT="Learning & research. Reports to the CEO." ;;
-  REDTEAM)     RUNTIME="codex-acp";        PROMPT="${PROMPT_DIR}/redteam.md";     NAME="Red Team";    ABOUT="Constructive devil's advocate — stress-tests plans and decisions. Reports to the CEO." ;;
-  ENGINEERING) RUNTIME="codex-acp";        PROMPT="${PROMPT_DIR}/engineering.md"; NAME="Engineering"; ABOUT="Code, systems, debugging, technical evaluation. Reports to the CEO." ;;
+  CAREER)      RUNTIME="claude-agent-acp"; PROMPT="${PROMPT_DIR}/career.md";      NAME="Career";      SKILLS="grilling handoff to-questionnaire";     ABOUT="Mentor · resume · interview · career strategy. Reports to the CEO." ;;
+  OPERATIONS)  RUNTIME="claude-agent-acp"; PROMPT="${PROMPT_DIR}/operations.md";  NAME="Operations";  SKILLS="grilling handoff to-tickets to-questionnaire"; ABOUT="Planning, coordination, tracking, logistics. Reports to the CEO." ;;
+  KNOWLEDGE)   RUNTIME="claude-agent-acp"; PROMPT="${PROMPT_DIR}/knowledge.md";   NAME="Knowledge";   SKILLS="grilling handoff research";             ABOUT="Learning & research. Reports to the CEO." ;;
+  REDTEAM)     RUNTIME="codex-acp";        PROMPT="${PROMPT_DIR}/redteam.md";     NAME="Red Team";    SKILLS="grilling handoff";                      ABOUT="Constructive devil's advocate — stress-tests plans and decisions. Reports to the CEO." ;;
+  ENGINEERING) RUNTIME="codex-acp";        PROMPT="${PROMPT_DIR}/engineering.md"; NAME="Engineering"; SKILLS="grilling handoff to-tickets";           ABOUT="Code, systems, debugging, technical evaluation. Reports to the CEO." ;;
   *) echo "run-agent: unknown role '${ROLE}'" >&2; exit 1 ;;
 esac
 
@@ -82,6 +86,7 @@ if [ "${RUNTIME}" = "claude-agent-acp" ]; then
   # than being wiped each restart.
   export CLAUDE_CONFIG_DIR="${HOME}/.claude-${ROLE}"
   mkdir -p "${CLAUDE_CONFIG_DIR}"
+  SKILLS_DIR="${CLAUDE_CONFIG_DIR}/skills"
 
   export ANTHROPIC_MODEL="${CLAUDE_MODEL}"
   export CLAUDE_CODE_EFFORT_LEVEL="${CLAUDE_EFFORT}"
@@ -93,6 +98,9 @@ else
   # state runtime under /home/agent/.codex"). Give each role its own home.
   export CODEX_HOME="${HOME}/.codex-${ROLE}"
   mkdir -p "${CODEX_HOME}"
+  # Codex discovers skills in $CODEX_HOME/skills automatically — same layout as
+  # Claude Code's, which is why one vendored folder serves both runtimes.
+  SKILLS_DIR="${CODEX_HOME}/skills"
   # One worker per Codex agent: within-agent parallelism would spawn a second
   # codex process sharing this same CODEX_HOME and collide on the SQLite state.
   export BUZZ_ACP_AGENTS=1
@@ -111,6 +119,26 @@ else
   export BUZZ_ACP_AGENT_ARGS="-c,model=\"${CODEX_MODEL}\",-c,model_reasoning_effort=\"${CODEX_EFFORT}\""
   MODEL_SHOWN="${CODEX_MODEL} effort=${CODEX_EFFORT}"
 fi
+
+# Install this role's skills from the image into the runtime's skills dir.
+# /opt/buzz-skills is authoritative: every skill it ships is removed and re-copied
+# on each start, so changing one means editing the repo and rebuilding — not poking
+# a live container, where the edit would be invisible in git and lost on rebuild.
+# Removing a skill from this role's SKILLS list therefore deletes it here too,
+# which matters because the volume outlives the container. Skills you add by hand
+# under other names are left untouched.
+mkdir -p "${SKILLS_DIR}"
+for src in /opt/buzz-skills/*/; do
+  [ -d "${src}" ] || continue
+  rm -rf "${SKILLS_DIR}/$(basename "${src}")"
+done
+for s in ${SKILLS}; do
+  if [ -d "/opt/buzz-skills/${s}" ]; then
+    cp -R "/opt/buzz-skills/${s}" "${SKILLS_DIR}/${s}"
+  else
+    echo "run-agent: WARNING skill '${s}' is missing from /opt/buzz-skills" >&2
+  fi
+done
 
 # Delegation: obey the listed teammates. You (owner) are ALWAYS implicitly allowed.
 allow="${!allow_var:-}"
@@ -136,4 +164,5 @@ buzz users set-profile --name "${NAME}" --about "${ABOUT}" \
   || echo "[run-agent] profile publish failed for ${NAME} (non-fatal)"
 
 echo "[run-agent] role=${ROLE} runtime=${RUNTIME} model=${MODEL_SHOWN} agents=${BUZZ_ACP_AGENTS} prompt=${PROMPT} respond_to=${BUZZ_ACP_RESPOND_TO} auth_tag=${AUTHTAG_SHOWN}"
+echo "[run-agent] skills -> ${SKILLS_DIR}: ${SKILLS}"
 exec buzz-acp

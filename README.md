@@ -17,6 +17,13 @@ Flat by design: all five report to you, none outranks another, and every agent c
 @mention every other. No cloud deployment — it runs on a machine you already own, on the
 Claude and ChatGPT subscriptions you already pay for.
 
+**They are a clinic, not an operating theatre.** You consult them the way you'd talk to a
+doctor: back and forth until the problem is clear and a course of action is agreed. They
+don't do the building. A consultation ends with a written brief — a handoff, a set of
+tickets — that you take to Claude Code on your own machine and execute there. This is why
+none of them has coding tooling, and why their skills are for interrogating and writing
+things down rather than for editing code. See [skills/README.md](skills/README.md).
+
 ## Start here
 
 | I want to… | Go to |
@@ -24,6 +31,7 @@ Claude and ChatGPT subscriptions you already pay for.
 | **Run it** — start, stop, back up, update | **[docs/operating.md](docs/operating.md)** |
 | **Fix something** — an agent is silent, auth broke | **[docs/troubleshooting.md](docs/troubleshooting.md)** |
 | **Understand it** — design, layout, why it's like this | **[docs/architecture.md](docs/architecture.md)** |
+| **Change what an agent can do** — its skills | **[skills/README.md](skills/README.md)** |
 | **Rare surgery** — rotate keys, restore a backup | **[docs/runbooks.md](docs/runbooks.md)** |
 
 ## The commands you'll actually type
@@ -50,7 +58,10 @@ your machine
                       └── redteam / engineering            → codex-acp
         all five dial OUT to wss://yc2897.communities.buzz.xyz
 
-    /home/agent  ← persistent volume; each agent works in work/<ROLE>
+    /opt/buzz-prompts → one system prompt per role
+    /opt/buzz-skills  → vendored skills; a per-role subset is copied in at start
+    /home/agent  ← persistent volume; each agent works in work/<ROLE>,
+                   writing handoffs/, tickets/, research/ for you to collect
     backup sidecar → stops the container nightly, archives it, restarts it
 ```
 

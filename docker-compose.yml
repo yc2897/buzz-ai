@@ -93,7 +93,11 @@ services:
       # catalogue into each CODEX_HOME on startup (so twice, once per Codex agent);
       # Claude Code caches plugin payloads the same way under plugins/cache. Left in,
       # they were ~73 MB of every archive — all of it re-downloadable.
-      - BACKUP_EXCLUDE_REGEXP=(^|/)(auth|credentials)\.json$|(^|/)\.credentials\.json$|(^|/)\.bash_history$|(^|/)(node_modules|\.venv|__pycache__|\.cache)/|(^|/)\.(codex|claude)-[^/]+/(cache|plugins/cache)/
+      # `skills/` is excluded for the same reason: run-agent.sh re-copies it from
+      # /opt/buzz-skills on every start, and the repo is its source of truth. Note
+      # this drops any skill you hand-add inside a container — put it in skills/ and
+      # rebuild instead, which is what you want anyway.
+      - BACKUP_EXCLUDE_REGEXP=(^|/)(auth|credentials)\.json$|(^|/)\.credentials\.json$|(^|/)\.bash_history$|(^|/)(node_modules|\.venv|__pycache__|\.cache)/|(^|/)\.(codex|claude)-[^/]+/(cache|plugins/cache|skills)/
       # Encrypt before anything leaves the machine. Bare = passed through from your
       # shell if set; unset means unencrypted local archives only.
       - AGE_PASSPHRASE
