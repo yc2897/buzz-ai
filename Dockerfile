@@ -30,8 +30,16 @@ FROM node:24-bookworm-slim AS runtime
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-        ca-certificates git openssl bash supervisor \
-    && rm -rf /var/lib/apt/lists/*
+        ca-certificates git openssl bash supervisor python3-pip \
+    && rm -rf /var/lib/apt/lists/* \
+    # Debian 12 ships python3 as PEP 668 "externally managed", which makes even
+    # `pip install --user` fail outright — the agents' prompts promise that it
+    # works, so without this they'd be lied to. Dropping the marker is safe here
+    # in a way it wouldn't be on a real machine: this image exists only to run
+    # the agents, there are no distro Python packages to break, and the agents
+    # are uid 1001, so a bare `pip install` still can't touch /usr. Installs go
+    # to /home/agent/.local, which is the persistent volume.
+    && rm -f /usr/lib/python3.11/EXTERNALLY-MANAGED
 
 # ACP adapters — Claude Code (career/operations/knowledge) + Codex (redteam/engineering).
 RUN npm install -g @agentclientprotocol/claude-agent-acp @agentclientprotocol/codex-acp
@@ -60,6 +68,11 @@ RUN sed -i 's/\r$//' /usr/local/bin/run-agent.sh /etc/supervisor/agents.conf \
 # so keep nothing sensitive baked into the image.
 USER agent
 WORKDIR /home/agent
+
+# `pip install --user` puts console scripts in ~/.local/bin. Without this on PATH
+# the library imports but the command it ships is "not found", which reads as a
+# broken install rather than a missing PATH entry.
+ENV PATH="/home/agent/.local/bin:${PATH}"
 
 # The ONE program the container runs. supervisord starts + babysits the 5 agents.
 CMD ["supervisord", "-c", "/etc/supervisor/agents.conf"]
