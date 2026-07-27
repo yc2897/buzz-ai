@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Start the buzz-ai agents. Works identically on macOS, Linux and Windows.
 
-    python3 start.py            # fetch secrets -> validate -> docker compose up -d
+    python3 start.py            # fetch secrets -> validate -> compose up -d --build
     python3 start.py --check    # validate only, print nothing secret, don't start
     python3 start.py --down     # docker compose down
+    python3 start.py --no-build # start without rebuilding the image first
 
 This is the only entry point, and the same command works everywhere — PowerShell,
 cmd, WSL, macOS Terminal, Linux. There is deliberately no start.sh: a .sh checked
@@ -149,8 +150,15 @@ def main(argv: list[str]) -> int:
     child.pop("BWS_ACCESS_TOKEN", None)
     child.update(dict(exports))
 
-    print(f"[start] starting {len(exports)} vars -> docker compose up -d")
-    rc = compose("up", "-d", env=child)
+    # Build by default. `compose up` on its own only builds when the image is
+    # MISSING, so once buzz-ai:local exists every later edit to the Dockerfile,
+    # prompts, skills or run-agent.sh is silently ignored — you restart, see no
+    # change, and go looking for the bug in the wrong place. A no-op rebuild costs
+    # about a second because every layer is cached, so this is close to free.
+    # --no-build opts out for the rare case where you want the image left alone.
+    up = ["up", "-d"] + ([] if "--no-build" in argv else ["--build"])
+    print(f"[start] starting {len(exports)} vars -> docker compose {' '.join(up)}")
+    rc = compose(*up, env=child)
     if rc == 0:
         print("[start] up. Logs:  docker compose logs -f")
     return rc

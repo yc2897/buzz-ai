@@ -42,7 +42,17 @@ RUN apt-get update \
     && rm -f /usr/lib/python3.11/EXTERNALLY-MANAGED
 
 # ACP adapters — Claude Code (career/operations/knowledge) + Codex (redteam/engineering).
-RUN npm install -g @agentclientprotocol/claude-agent-acp @agentclientprotocol/codex-acp
+# PINNED, like BUZZ_REF above: unpinned, every rebuild silently takes whatever npm
+# publishes, so an adapter change would show up as agents mysteriously breaking with
+# no diff in this repo to explain it. These two speak the protocol that buzz-acp
+# negotiates against, which makes them exactly the wrong thing to float.
+# To take an update, bump a version here deliberately and re-run the smoke test in
+# docs/operating.md — do not widen these to ranges.
+ARG CLAUDE_ACP_VERSION=0.62.0
+ARG CODEX_ACP_VERSION=1.1.7
+RUN npm install -g \
+      "@agentclientprotocol/claude-agent-acp@${CLAUDE_ACP_VERSION}" \
+      "@agentclientprotocol/codex-acp@${CODEX_ACP_VERSION}"
 
 # The two Buzz binaries.
 COPY --from=builder /src/target/release/buzz-acp /usr/local/bin/buzz-acp
